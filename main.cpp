@@ -1,114 +1,181 @@
 #include <iostream>
 #include <stdlib.h>
+#include <stdio.h>
+#include <thread>
 #include <vector>
 #include <time.h>
 
+#define __DEBUG__
+
 using namespace std;
 
-// function given to us by evalX.o
 double eval(int *pj);
 
-// Helper Functions
-void printArray(int* iArray);
-void increment(int* iArray);
-void init(int* iArray);
-void copy(int* fromArray, int* toArray);
+void generatePopulation();
+void evaluatePopulation();
+void selectPopulation();
+void crossoverPopulation();
+void mutatePopulation();
 
-int bestArray [100];
-double bestFitness = 0.0;
+int getWeightedPosition();
 
-// Worker Function
-void hillClimber();
+const int populationSize = 100;
+const int chromosomes = 150;
+const int maxGen = 100000;
+
+vector<vector<int>> currentPopulation;
+vector<vector<int>> newPopulation;
+vector<double> weights;
+
+vector<int> fittest;
+int fittestFitness = 0;
 
 int main()
 {
-	hillClimber();
+	int currentGeneration = 0;
 	
-	// Once threads are finished, print out the best array and it's fitness.
-	cout << "Best Fitness: " << bestFitness << endl;
-	printArray(bestArray);
+	generatePopulation();
+	evaluatePopulation();
+	
+	while(currentGeneration < maxGen)
+	{
+		cout << "Current Generation: " << currentGeneration << endl;
+		selectPopulation();
+		crossoverPopulation();
+		mutatePopulation();
+		
+		currentPopulation = newPopulation;
+		evaluatePopulation();
+		currentGeneration++;
+	}
+	return 0;
 }
 
-void copy(int* fromArray, int* toArray)
+void generatePopulation()
 {
-	for(int i = 0; i < 100; i++)
-	{
-    	toArray[i] = fromArray[i];
- 	}
-}
-
-void init(int* iArray)
-{
-	for(int i = 0; i < 100; i++)
-	{
-		iArray[i] = 0;
+	srand(1);
+	
+	vector<int> member;
+	for(int i = 0; i < populationSize; i++)
+	{	
+		member.clear();
+		for(int c = 0; c < chromosomes; c++)
+		{
+			member.push_back(rand() % 2);
+		}
+		currentPopulation.push_back(member);
 	}
 }
 
-void increment(int* iArray)
+void evaluatePopulation()
 {
+	weights.clear();
+	double fitness = 0;
+	
+	int population[150];
+	std::copy(currentPopulation[0].begin(), currentPopulation[0].end(), population);
+	fitness = eval(population);
+	weights.push_back(fitness);
+	
+	if(fitness > fittestFitness)
+	{
+		fittest = currentPopulation[0];
+		fittestFitness = fitness;
+	}
+	
+	for(int i = 1; i < populationSize; i++)
+	{
+		std::copy(currentPopulation[i].begin(), currentPopulation[i].end(), population);
+		
+		fitness = eval(population);
+		weights.push_back(fitness + weights[i-1]);
+	
+		if(fitness > fittestFitness)
+		{
+			fittest = currentPopulation[0];
+			fittestFitness = fitness;
+		}
+	}
+	
+	#ifdef __DEBUG__
+	double averageFitness = weights[populationSize -1] / (double)populationSize;
+	cout << "Current Fittest: " << fittestFitness << endl;
+	cout << "Average Fitness: " << averageFitness << endl;
+	#endif
+}
+
+void selectPopulation()
+{
+	newPopulation.clear();
+	int selectedMember = -1;
+	
+	for(int i = 0; i < populationSize; i++)
+	{
+		selectedMember = getWeightedPosition();
+		newPopulation.push_back(currentPopulation[selectedMember]);
+	}
+}
+
+int getWeightedPosition()
+{
+	int totalWeight = weights[populationSize - 1];
+	
+	int rng = rand() % totalWeight;
+	
+	for(int i = 0; i < populationSize; i++)
+	{
+		if(rng < weights[i])
+		{
+			return i;
+		}
+	}
+}
+
+void crossoverPopulation()
+{
+	int crossoverRNG = -1;
+	int positionRNG = -1;
+	
 	int i = 0;
 	
-	while(iArray[i] == 1 && iArray[i] < 100)
+	while(i < populationSize)
 	{
-		i++;
-	}
-	
-	iArray[i] = 1;
-}
-
-void printArray(int* iArray)
-{
-	cout << "[";
-	
-	for (int i = 0; i < 99; i++)
-    {
-        cout << iArray[i] << ",";
-    }
-    cout << iArray[99];
-    cout << "]" << endl;
-}
-
-void hillClimber()
-{
-	long randomCounter = 0;
-	
-	// Incrementing
-	double oldFitness = 0;
-	int oldArray[100];
-	double newFitness = 0;
-	int newArray[100];
-	
-	while(randomCounter < 100)
-	{		
-		// Find a new random starting point
-		init(newArray);
-		oldFitness = 0;
-		newFitness = eval(newArray);
+		vector<int> parent1 = newPopulation[i];
+		vector<int> parent2 = newPopulation[i+1];
 		
-		// While the new point is higher, keep climbing
-		while(newFitness >= oldFitness)
-		{
-			copy(newArray, oldArray);
-			oldFitness = newFitness;
-			
-			increment(newArray);
-			newFitness = eval(newArray);			
-		}
+		crossoverRNG = rand() % 100;
 		
-		// If this local maxima is better than the best known maxima, then save it off.
-		if(oldFitness > bestFitness)
+		if(crossoverRNG < 70)
 		{
-			copy(oldArray, bestArray);
-			bestFitness = oldFitness;
-			cout << "New Maximum: " << oldFitness << endl;
+			positionRNG = rand() % chromosomes;
 			
-			if(bestFitness == 100)
+			for(int c = 0; c < chromosomes; c++)
 			{
-				randomCounter = 100;
+				if(c >= positionRNG)
+				{
+					newPopulation[i][c] = parent2[c];
+					newPopulation[i+1][c] = parent1[c];
+				}
+			}
+		}	
+		
+		i += 2;	
+	}
+}
+
+void mutatePopulation()
+{
+	int mutationRNG  = -1;
+	for(int i = 0; i < populationSize; i++)
+	{
+		for(int c = 0; c < chromosomes; c++)
+		{
+			mutationRNG = rand() % 1000 + 1;
+			
+			if(mutationRNG == 1)
+			{
+				newPopulation[i][c] = !newPopulation[i][c];
 			}
 		}
-		
-		randomCounter++;
 	}
-}
+}	
